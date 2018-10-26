@@ -1,0 +1,190 @@
+import datetime
+import matplotlib.pyplot as plt
+from matplotlib import style
+import pandas as pd
+import pandas_datareader.data as web
+import requests
+from datetime import datetime
+import matplotlib.pyplot as plt
+import numpy as np
+from iex import reference
+from iex import Stock
+from iexfinance import Stock
+from iexfinance import get_stats_intraday
+import talib
+import statistics
+import csv
+import prince
+from collections import deque
+import numpy as np
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import csv
+import pickle
+from datetime import datetime
+import dateutil
+
+def getBottoms(prices, n=1):
+    q = deque()
+    bottoms = []
+    for idx, p in enumerate(prices):
+        if len(q) == 0:
+            q.append(p)
+        elif len(q) < n:
+            if p < q[-1]:
+                q.append(p)
+            else:
+                q.clear()
+        elif len(q) == n:
+            if p < q[-1]:
+                q.append(p)
+                bottoms.append((idx,p))
+            else:
+                q.clear()
+        elif len(q) > n:
+            if len(q) == 2*n+1:
+                q.clear()
+                q.append(p)
+            else:
+                if p > q[-1]:
+                    q.append(p)
+                else:
+                    q.clear()
+                    del bottoms[-1]
+    return bottoms
+
+def resampler(x):    
+    return x.set_index('datetime').resample('5m').mean().rolling(window=2).mean()
+
+#symbols = np.array(["A", "AXON","ADMA", "AAC", "AAME", "AAON", "CLDC"])
+
+for k in range(35):
+
+ print(str(datetime.now()))
+
+ f = open('symb.csv', 'r')
+ line = f.readline()
+ symbols = [i.strip() for i in line.split(',')]
+ 
+ for stock in symbols:
+
+  print(stock)
+
+  try:
+    url = "https://api.iextrading.com/1.0/stock/"+ stock+ "/chart/1d"
+
+    a = pd.read_json(url).dropna()
+    print('json object')
+    print(a)
+    
+    # converting json dataset from dictionary to dataframe
+    #r = pd.DataFrame.from_dict(a)
+    r = pd.DataFrame(a)
+    print ('Dataframe object')
+    #print (r)
+
+    day = r['date'].iloc[0]
+    print(day)
+    
+    r.reset_index(level=0, inplace=True)
+       
+    #print('Reset Index')
+    #print (r)
+    
+    index = r.index
+    print(index)
+    columns = r.columns
+    print(columns)
+    values = r.values
+    print(values)
+
+   
+    r = r.set_index(pd.to_datetime((r.index), origin=pd.Timestamp('2000-01-01'), unit='d')) #, inplace=True, drop=True)
+    print(r)
+    df = r.resample('5d').mean()
+    print('Resampled')
+    print(df)
+
+    #print('Added index - minute')
+    #print(r)
+    
+    df = a[np.array(a['marketLow']>=0)]
+    #df.reset_index(drop=True, inplace=True)
+    df = r[['date','minute','marketLow','volume']]
+
+    bottoms = getBottoms(r['marketLow'], 1)
+    #btm = bottoms[np.array(bottoms[0])]
+
+    print('Bottoms')
+    print(bottoms)
+    
+    print(r[['minute','marketLow']])
+    
+    if r['marketLow'].iloc[-1] <= 22:
+
+     #print(stock + " All bottoms")
+     #print(bottoms)
+     #print("Price and time")
+     #print(r[['minute','marketLow']])
+      
+     rsi = talib.RSI(r['marketLow'],timeperiod=14)
+     m = 0
+     for m in reversed(range(len(bottoms))):
+
+     #if (r['marketLow'].iloc[-1] < r['marketLow'].iloc[-2] and r['marketLow'].iloc[-2] < r['marketLow'].iloc[-3] and r['marketLow'].iloc[-3] < r['marketLow'].iloc[-4]):
+       if r['marketLow'].iloc[-1] in bottoms[m]:
+
+            RSI_n = rsi.iloc[-1]
+            P_n = round(r['marketLow'].iloc[-1],2)
+            Tim = r['minute'].iloc[-1] 
+            Std = round(r['marketLow'].pct_change().std()*100,2)
+            
+            print(Stock)
+            print("First bottom - " + Tim)
+            #print("Stock price - " + P_n)
+            #print("STD - " + Std)
+            
+            j = 10
+            i = 0
+            for j in reversed(range(len(r)-10)): #enumerate(r): # reversed(enumerate(r)): #reversed(len(r)):               
+              for i in reversed(range(len(bottoms))): #enumerate(r): # reversed(enumerate(r)): #reversed(len(r)):               
+                print(r['marketLow'].iloc[j])
+                #if (r['marketLow'].iloc[j] < r['marketLow'].iloc[j+1]) and (r['marketLow'].iloc[j-1] < r['marketLow'].iloc[j]) and (r['marketLow'].iloc[j-1] < r['marketLow'].iloc[j-2]) and (r['marketLow'].iloc[j-2] < r['marketLow'].iloc[j-3]):
+                #if r['low'][j] <= min(r['low'][j-2:j+2]):
+                if r['marketLow'][j] in bottoms[i]:
+               
+                    Time = r['minute'].iloc[j-1]                
+                    P_o = r['marketLow'].iloc[j-1]
+                    RSI_o = rsi[j-1]
+
+                    #print(Stock)
+                    #print("Second bottom")
+                    #print(Time)
+                    #print("Stock price")
+                    #print(P_o)
+                    #print("RSI ")
+                    #print(RSI_o)
+                     
+                    if ((P_o >= P_n) and (RSI_n > 1.05 * RSI_o)) or ((P_o > 1.05 * P_n) and (RSI_n >= RSI_o)):       
+
+                        SellPr = round(P_n * 2 * Std/100 + P_n,2)
+                        print("1st bottom:", Tim, "Price- ", P_n, "RSI-", RSI_n, "Std-", Std, "Sell price -", SellPr)
+                        print("2nd bottom:", Time, "RSI- ", P_o, "RSI-", RSI_o )
+                        
+                        f = open('C:/Users/Alexander/Documents/Results.txt', 'a')
+                        v = ("Stck-", stock, "T-", Tim, "Std-", Std, "B Price- ", P_n, "S Price-", SellPr)
+                        s = str(v)
+                        f.write(s)
+                        f.write("\n")
+                        f.close()
+
+                        break
+                        
+                    else:break
+                else:break
+                
+  except Exception:
+         pass
+        
+print(str(datetime.now()))
+
